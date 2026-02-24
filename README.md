@@ -1,5 +1,3 @@
 # mobicare-LLMGuidance-testing
 
-
-chmod +x experiments/001_document_processing/run_matrix.sh
-./experiments/001_document_processing/run_matrix.sh
+This repository is used for testing differernt stratogies, tools, and coding architectures for use in the building of the LLM guidance system for mobicare & lab
