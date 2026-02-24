@@ -1,0 +1,5 @@
+strategy: tree_parent_child
+parent_max_tokens: 900   
+parent_top_k: 3            
+child_chunk_size: 450
+child_overlap: 100

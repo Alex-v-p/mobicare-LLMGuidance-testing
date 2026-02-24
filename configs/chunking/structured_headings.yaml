@@ -1,0 +1,3 @@
+strategy: structured_headings
+max_tokens: 800
+min_tokens: 120
