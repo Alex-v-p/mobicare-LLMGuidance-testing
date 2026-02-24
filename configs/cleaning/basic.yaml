@@ -1,0 +1,5 @@
+name: basic
+remove_headers_footers: false
+dehyphenate: false
+collapse_whitespace: true
+strip_nonprinting: true

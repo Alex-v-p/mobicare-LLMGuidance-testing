@@ -1,0 +1,16 @@
+name: deep
+remove_headers_footers: true
+dehyphenate: true
+collapse_whitespace: true
+strip_nonprinting: true
+
+# “noise” filtering
+drop_reference_like_chunks: true
+drop_abbreviation_like_chunks: true
+drop_low_signal_chunks: true
+
+min_alpha_ratio: 0.55
+min_token_count: 40
+max_digit_ratio: 0.25
+max_allcaps_ratio: 0.35
+max_equals_per_100_chars: 1.5

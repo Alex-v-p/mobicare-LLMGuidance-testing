@@ -1,0 +1,5 @@
+type: sentence_transformers
+model_name: BAAI/bge-small-en-v1.5
+batch_size: 64
+normalize_embeddings: true
+device: auto
