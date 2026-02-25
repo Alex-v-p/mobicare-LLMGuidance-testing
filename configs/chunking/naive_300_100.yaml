@@ -1,0 +1,3 @@
+strategy: naive_tokens
+chunk_size: 300
+overlap: 100

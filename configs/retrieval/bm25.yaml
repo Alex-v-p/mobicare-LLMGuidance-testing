@@ -1,0 +1,6 @@
+type: bm25
+candidate_k: 200
+rewriter:
+  type: none
+reranker:
+  type: none

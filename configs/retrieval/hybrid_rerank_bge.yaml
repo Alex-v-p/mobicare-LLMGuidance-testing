@@ -1,0 +1,12 @@
+type: hybrid
+dense_weight: 0.6
+bm25_weight: 0.4
+candidate_k: 300
+reranker:
+  type: cross_encoder
+  model_name: BAAI/bge-reranker-base
+  device: auto
+  batch_size: 32
+rerank_on: candidates
+rewriter:
+  type: none

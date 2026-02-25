@@ -1,0 +1,8 @@
+type: hybrid
+dense_weight: 0.6
+bm25_weight: 0.4
+candidate_k: 300
+rewriter:
+  type: none
+reranker:
+  type: none

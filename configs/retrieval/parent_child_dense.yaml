@@ -1,0 +1,7 @@
+type: dense
+parent_top_k: 3
+candidate_k: 200
+rewriter:
+  type: none
+reranker:
+  type: none

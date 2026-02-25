@@ -1,0 +1,5 @@
+type: sentence_transformers
+model_name: pritamdeka/S-BioBERT-snli-multinli-stsb
+batch_size: 64
+normalize_embeddings: true
+device: auto

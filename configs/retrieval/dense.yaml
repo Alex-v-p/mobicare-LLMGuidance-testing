@@ -1,0 +1,6 @@
+type: dense
+candidate_k: 50
+rewriter:
+  type: none
+reranker:
+  type: none
