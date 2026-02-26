@@ -1,0 +1,9 @@
+type: sentence_transformers
+model_name: intfloat/e5-large-v2
+batch_size: 16
+normalize_embeddings: true
+device: auto
+
+# E5 expects instruction prefixes for best performance.
+query_prefix: "query: "
+passage_prefix: "passage: "

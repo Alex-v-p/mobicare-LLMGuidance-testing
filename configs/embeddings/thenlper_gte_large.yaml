@@ -1,0 +1,6 @@
+type: sentence_transformers
+model_name: thenlper/gte-large
+batch_size: 32
+normalize_embeddings: true
+device: auto
+trust_remote_code: false

@@ -1,0 +1,6 @@
+type: sentence_transformers
+model_name: mixedbread-ai/mxbai-embed-large-v1
+batch_size: 16
+normalize_embeddings: true
+device: auto
+trust_remote_code: true

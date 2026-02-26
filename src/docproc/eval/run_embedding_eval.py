@@ -114,6 +114,16 @@ def _gpu_peak_mb() -> float:
         return -1.0
 
 
+def _maybe_reset_gpu_peak() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        pass
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Compare embedding models (time, memory, retrieval metrics)")
     p.add_argument("--pages", required=True, help="JSONL with per-page extracted text")
@@ -123,6 +133,11 @@ def main() -> None:
     p.add_argument("--embedding-config", required=True, help="YAML embedding config")
     p.add_argument("--k", type=int, default=5, help="Top-k to retrieve (default 5)")
     p.add_argument("--outdir", default="results/runs", help="Output directory for run artifacts")
+    p.add_argument(
+        "--warmup",
+        action="store_true",
+        help="Optional warmup encode to reduce first-run timing noise (recommended if benchmarking).",
+    )
     args = p.parse_args()
 
     pages_path = Path(args.pages)
@@ -143,6 +158,17 @@ def main() -> None:
     emb_cfg: dict = yaml.safe_load(Path(args.embedding_config).read_text(encoding="utf-8")) or {}
     embedder = build_embedder(emb_cfg)
 
+    # Some embedding families (e.g. E5) require specific prefixes.
+    query_prefix = str(emb_cfg.get("query_prefix", ""))
+    passage_prefix = str(emb_cfg.get("passage_prefix", ""))
+
+    def _with_prefix(prefix: str, text: str) -> str:
+        if not prefix:
+            return text
+        if text.lower().startswith(prefix.lower()):
+            return text
+        return f"{prefix}{text}"
+
     pages = load_pages_jsonl(pages_path)
     pages = [Page(page=p.page, text=apply_cleaning(p.text, profile)) for p in pages]
 
@@ -151,15 +177,17 @@ def main() -> None:
 
     # Memory baselines
     rss_before = _rss_mb()
+    rss_peak = rss_before
     gpu_peak_before = _gpu_peak_mb()
+    _maybe_reset_gpu_peak()
 
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
-    except Exception:
-        pass
+    # Optional warmup (helps fair timing if you run many models)
+    if args.warmup:
+        try:
+            _ = embedder.transform(["warmup"])
+            rss_peak = max(rss_peak, _rss_mb())
+        except Exception:
+            pass
 
     # --- Document embedding timing ---
     t0 = time.perf_counter()
@@ -174,8 +202,14 @@ def main() -> None:
         parent_texts = [normalize_text(c.text) for c in parents]
         child_texts = [normalize_text(c.text) for c in children]
 
+        parent_texts = [_with_prefix(passage_prefix, t) for t in parent_texts]
+        child_texts = [_with_prefix(passage_prefix, t) for t in child_texts]
+
+        rss_peak = max(rss_peak, _rss_mb())
         parent_matrix = embedder.fit_transform(parent_texts)
+        rss_peak = max(rss_peak, _rss_mb())
         child_matrix = embedder.transform(child_texts)
+        rss_peak = max(rss_peak, _rss_mb())
 
         child_parent_ids = [c.chunk_id.split("/")[0] for c in children]
         parent_ids = [p.chunk_id for p in parents]
@@ -189,29 +223,45 @@ def main() -> None:
             chunks = [c for c in chunks if not is_noise_chunk(c.text, profile)]
 
         chunk_texts = [normalize_text(c.text) for c in chunks]
+        chunk_texts = [_with_prefix(passage_prefix, t) for t in chunk_texts]
+
+        rss_peak = max(rss_peak, _rss_mb())
         doc_matrix = embedder.fit_transform(chunk_texts)
+        rss_peak = max(rss_peak, _rss_mb())
         doc_retrieve = pick_retriever(doc_matrix)
 
     doc_embed_seconds = time.perf_counter() - t0
 
-    # --- Query embedding timing ---
+    # --- Query embedding timing (BATCHED) ---
     questions = load_retrieval_questions(questions_path)
+    q_texts = [_with_prefix(query_prefix, q.question) for q in questions]
 
     t1 = time.perf_counter()
-    q_vecs = [embedder.transform([q.question]) for q in questions]
+    q_matrix = embedder.transform(q_texts)  # batch encode (much faster & more realistic)
     query_embed_seconds = time.perf_counter() - t1
+    rss_peak = max(rss_peak, _rss_mb())
 
     # --- Retrieval evaluation ---
     first_ranks: list[int | None] = []
     per_q: list[dict] = []
 
-    for q, q_vec in zip(questions, q_vecs, strict=True):
+    for i, q in enumerate(questions):
+        # Ensure q_vec is shape (1, dim) for both numpy/cosine helpers
+        q_vec = q_matrix[i]
+        try:
+            import numpy as np
+
+            if hasattr(q_vec, "ndim") and q_vec.ndim == 1:
+                q_vec = np.asarray(q_vec).reshape(1, -1)
+        except Exception:
+            pass
+
         if strategy == "tree_parent_child":
             parent_top_k = int(chunk_cfg.get("parent_top_k", 3))
             top_parents = parent_retrieve(q_vec, parent_matrix, k=parent_top_k)
             allowed_parent_ids = {parent_ids[r.idx] for r in top_parents}
 
-            allowed_child_idx = [i for i, pid in enumerate(child_parent_ids) if pid in allowed_parent_ids]
+            allowed_child_idx = [j for j, pid in enumerate(child_parent_ids) if pid in allowed_parent_ids]
 
             if not allowed_child_idx:
                 results = child_retrieve(q_vec, child_matrix, k=args.k)
@@ -263,6 +313,7 @@ def main() -> None:
 
     # Memory after
     rss_after = _rss_mb()
+    rss_peak = max(rss_peak, rss_after)
     gpu_peak_after = _gpu_peak_mb()
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -283,6 +334,7 @@ def main() -> None:
         "query_embedding_seconds": query_embed_seconds,
         "rss_mb_before": rss_before,
         "rss_mb_after": rss_after,
+        "rss_mb_peak": rss_peak,
         "gpu_peak_mb": gpu_peak_after,
         "gpu_peak_mb_before": gpu_peak_before,
     }
@@ -295,12 +347,21 @@ def main() -> None:
     summary_dir.mkdir(parents=True, exist_ok=True)
     leaderboard = summary_dir / "leaderboard_embeddings.csv"
 
+    # Robust model name
+    model_name = (
+        emb_cfg.get("model_name")
+        or emb_cfg.get("model")
+        or emb_cfg.get("name")
+        or emb_cfg.get("repo_id")
+        or ""
+    )
+
     row = {
         "run_id": run_id,
         "chunking_strategy": strategy,
         "cleaning": profile.name,
         "embedder_type": emb_cfg.get("type", ""),
-        "embedder_model": emb_cfg.get("model_name", ""),
+        "embedder_model": model_name,
         "batch_size": emb_cfg.get("batch_size", ""),
         "chunk_size": chunk_cfg.get("child_chunk_size", chunk_cfg.get("chunk_size", "")),
         "overlap": chunk_cfg.get("child_overlap", chunk_cfg.get("overlap", "")),
@@ -308,6 +369,7 @@ def main() -> None:
         "doc_embedding_seconds": doc_embed_seconds,
         "query_embedding_seconds": query_embed_seconds,
         "rss_mb_after": rss_after,
+        "rss_mb_peak": rss_peak,
         "gpu_peak_mb": gpu_peak_after,
         "hit@1": metrics.hit_at_1,
         "hit@3": metrics.hit_at_3,
@@ -330,7 +392,9 @@ def main() -> None:
     print(f"Embedder: {row['embedder_type']} {row['embedder_model']}".strip())
     print(f"Doc embedding seconds: {doc_embed_seconds:.3f} | Query embedding seconds: {query_embed_seconds:.3f}")
     if rss_after >= 0:
-        print(f"CPU RSS (MB): {rss_after:.1f}")
+        print(f"CPU RSS after (MB): {rss_after:.1f}")
+    if rss_peak >= 0:
+        print(f"CPU RSS peak (MB): {rss_peak:.1f}")
     if gpu_peak_after >= 0:
         print(f"GPU peak allocated (MB): {gpu_peak_after:.1f}")
     print(f"Hit@1: {metrics.hit_at_1:.3f}  Hit@3: {metrics.hit_at_3:.3f}  Hit@5: {metrics.hit_at_5:.3f}")

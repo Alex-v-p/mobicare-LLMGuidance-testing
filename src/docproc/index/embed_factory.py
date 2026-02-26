@@ -17,6 +17,7 @@ class STEmbedder:
     trust_remote_code: bool = False
 
     model: SentenceTransformer = None
+    max_seq_length: int | None = None  
 
     def __post_init__(self):
         # Newer SentenceTransformers versions support trust_remote_code directly.
@@ -34,6 +35,9 @@ class STEmbedder:
                 device=self.device,
                 model_kwargs={"trust_remote_code": self.trust_remote_code},
             )
+
+        if self.max_seq_length is not None:
+            self.model.max_seq_length = self.max_seq_length
 
     def fit_transform(self, texts: list[str]) -> np.ndarray:
         return self.model.encode(
@@ -57,6 +61,7 @@ class STEmbedder:
 def build_embedder(cfg: dict):
     cfg = cfg or {}
     typ = str(cfg.get("type", "tfidf")).lower()
+    max_seq_length = cfg.get("max_seq_length", None)
 
     if typ == "tfidf":
         return TfidfEmbedder()
@@ -78,7 +83,8 @@ def build_embedder(cfg: dict):
             batch_size=batch_size,
             normalize_embeddings=normalize,
             device=str(device),
-            trust_remote_code=trust_remote_code,  
+            trust_remote_code=trust_remote_code,
+            max_seq_length=max_seq_length,
         )
 
     raise ValueError(f"Unknown embedder type: {typ}")
