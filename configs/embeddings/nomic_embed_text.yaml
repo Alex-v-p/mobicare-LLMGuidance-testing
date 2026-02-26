@@ -1,0 +1,6 @@
+type: sentence_transformers
+model_name: nomic-ai/nomic-embed-text-v1.5
+batch_size: 64
+normalize_embeddings: true
+trust_remote_code: true
+device: auto

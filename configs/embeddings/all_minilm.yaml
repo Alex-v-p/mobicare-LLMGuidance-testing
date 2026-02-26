@@ -1,0 +1,5 @@
+type: sentence_transformers
+model_name: sentence-transformers/all-MiniLM-L6-v2
+batch_size: 128
+normalize_embeddings: true
+device: auto

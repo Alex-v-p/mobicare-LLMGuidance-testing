@@ -12,3 +12,5 @@ PyMuPDF
 rank-bm25>=0.2.2
 transformers>=4.40
 accelerate>=0.30
+psutil>=5.9
+einops>=0.7
