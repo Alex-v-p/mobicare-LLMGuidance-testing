@@ -1,0 +1,1 @@
+run_id,embedding_config,chunking_config,cleaning_config,k,backend,n_vectors,dim,ingest_time_s,query_p50_ms,query_p95_ms,qps,persist_time_s,reload_time_s,first_query_ms_after_reload,disk_size_mb,rss_before_mb,rss_after_mb,agreement_at_k
