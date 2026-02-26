@@ -7,13 +7,24 @@ param(
     [int]$K = 5,
 
     # Comma-separated list: faiss,sqlite,qdrant
-    [string]$Backends = "faiss,sqlite,qdrant",
+    [string]$Backends = "faiss,sqlite,qdrant,LanceDB,pgvector,Milvus,Weaviate",
 
     [string]$QdrantHost = "localhost",
     [int]$QdrantPort = 6333,
 
     # Install optional deps for these backends
-    [switch]$InstallVectorDeps
+    [switch]$InstallVectorDeps,
+
+    [string]$PgHost = "localhost",
+    [int]$PgPort = 5432,
+    [string]$PgUser = "vec",
+    [string]$PgPassword = "vec",
+    [string]$PgDb = "vecdb",
+
+    [string]$MilvusHost = "localhost",
+    [int]$MilvusPort = 19530,
+
+    [string]$WeaviateUrl = "http://localhost:8080"
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,8 +85,20 @@ if ($InstallVectorDeps) {
     --backends $Backends `
     --qdrant-host $QdrantHost `
     --qdrant-port $QdrantPort `
+    --pg-host $PgHost `
+    --pg-port $PgPort `
+    --pg-user $PgUser `
+    --pg-password $PgPassword `
+    --pg-db $PgDb `
+    --milvus-host $MilvusHost `
+    --milvus-port $MilvusPort `
+    --weaviate-url $WeaviateUrl `
+    --flood `
+    --concurrency 50 `
+    --burst-requests 500 `
+    --timeout-ms 2000 `
     --outdir "results"
 
 if ($LASTEXITCODE -ne 0) { throw "Vector DB benchmark failed (exit code $LASTEXITCODE)" }
 
-Write-Host "Done. Check results/vector_db/<run_id>/leaderboard_vector_db.csv" -ForegroundColor Green
+Write-Host "Done. Check results/runs/vecdb_<run_id>/leaderboard_vector_db.csv and results/summary/leaderboard_vecdb.csv" -ForegroundColor Green

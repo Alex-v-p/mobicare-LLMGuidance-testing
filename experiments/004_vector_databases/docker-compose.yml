@@ -8,5 +8,32 @@ services:
       - qdrant_storage:/qdrant/storage
     restart: unless-stopped
 
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: vec
+      POSTGRES_PASSWORD: vec
+      POSTGRES_DB: vecdb
+    ports:
+      - "5432:5432"
+      
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    command: ["milvus", "run", "standalone"]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+
+  weaviate:
+    image: semitechnologies/weaviate:1.25.4
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: "25"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      ENABLE_MODULES: ""
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+
 volumes:
   qdrant_storage:
