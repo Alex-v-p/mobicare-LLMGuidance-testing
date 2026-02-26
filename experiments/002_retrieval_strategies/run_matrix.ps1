@@ -38,6 +38,9 @@ if (!(Test-Path $EmbeddingConfig)) { throw "Embedding config not found: $Embeddi
 $chunkingVariants = @()
 $chunkingVariants += (Join-Path $RepoRoot "configs\chunking\naive_300_50.yaml")
 
+# Page-index baseline (retrieve whole pages instead of sub-page chunks)
+$chunkingVariants += (Join-Path $RepoRoot "configs\chunking\page_index.yaml")
+
 if ($IncludeOverlap300100) {
     $chunkingVariants += (Join-Path $RepoRoot "configs\chunking\naive_300_100.yaml")
 }

@@ -12,6 +12,7 @@ import yaml
 
 from ..chunkers.base import Page
 from ..chunkers.naive_tokens import NaiveTokenChunker
+from ..chunkers.page_index import PageIndexChunker
 from ..chunkers.structured import StructuredHeadingChunker
 from ..chunkers.tree_parent_child import TreeParentChildChunker
 from ..clean import normalize_text, simple_tokenize
@@ -37,6 +38,8 @@ def load_pages_jsonl(path: Path) -> list[Page]:
 
 def build_chunker(cfg: dict):
     strategy = cfg.get("strategy")
+    if strategy == "page_index":
+        return PageIndexChunker()
     if strategy == "naive_tokens":
         return NaiveTokenChunker(chunk_size=int(cfg["chunk_size"]), overlap=int(cfg["overlap"]))
     if strategy == "structured_headings":

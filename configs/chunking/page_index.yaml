@@ -1,0 +1,5 @@
+strategy: page_index
+
+# Page-index retrieval baseline:
+# - no sub-page chunking
+# - each page becomes one retrievable unit
