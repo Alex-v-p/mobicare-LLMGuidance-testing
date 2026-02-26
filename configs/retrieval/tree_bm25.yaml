@@ -1,0 +1,5 @@
+type: tree_parent_child
+child_retriever: bm25
+parent_selection: top_k
+child_top_k: 50
+parent_top_k: 5

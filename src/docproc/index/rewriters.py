@@ -129,6 +129,12 @@ def _parse_device(value: object) -> Optional[str]:
 
 def build_rewriter(cfg: dict | None) -> QueryRewriter:
     cfg = cfg or {}
+    if cfg is None:
+        cfg = {"type": "none"}
+    elif isinstance(cfg, str):
+        cfg = {"type": cfg}
+    elif not isinstance(cfg, dict):
+        raise TypeError(f"rewriter config must be dict or str, got: {type(cfg)}")
     typ = str(cfg.get("type", "none")).lower()
 
     if typ in ("none", "noop"):

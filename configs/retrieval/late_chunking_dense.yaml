@@ -1,0 +1,6 @@
+type: late_chunking
+page_retriever: dense
+page_top_k: 12        # IMPORTANT: must be > k (default k=5)
+sub_chunk_size: 300
+sub_overlap: 100
+sub_candidate_k: 100

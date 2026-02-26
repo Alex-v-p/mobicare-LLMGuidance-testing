@@ -1,0 +1,5 @@
+type: tree_parent_child
+child_retriever: dense
+parent_selection: top_k
+child_top_k: 30
+parent_top_k: 5

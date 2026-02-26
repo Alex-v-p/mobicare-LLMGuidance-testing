@@ -1,0 +1,6 @@
+type: tree_parent_child
+child_retriever: dense
+parent_selection: rerank
+child_top_k: 50
+parent_top_k: 5
+reranker_model: BAAI/bge-reranker-base

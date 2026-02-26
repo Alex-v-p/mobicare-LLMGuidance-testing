@@ -1,0 +1,8 @@
+type: late_chunking
+page_retriever: hybrid
+dense_weight: 0.5
+bm25_weight: 0.5
+page_top_k: 12
+sub_chunk_size: 300
+sub_overlap: 100
+sub_candidate_k: 120

@@ -1,0 +1,8 @@
+type: tree_parent_child
+child_retriever: hybrid
+parent_selection: top_k
+child_top_k: 50
+parent_top_k: 5
+hybrid:
+  dense_weight: 0.5
+  bm25_weight: 0.5

@@ -15,6 +15,7 @@ from ..chunkers.naive_tokens import NaiveTokenChunker
 from ..chunkers.page_index import PageIndexChunker
 from ..chunkers.structured import StructuredHeadingChunker
 from ..chunkers.tree_parent_child import TreeParentChildChunker
+from ..chunkers.late_chunking import LateChunkingChunker
 from ..clean import normalize_text, simple_tokenize
 from ..clean_profiles import apply_cleaning, is_noise_chunk, profile_from_cfg
 from ..index.embed_factory import build_embedder
@@ -40,6 +41,8 @@ def build_chunker(cfg: dict):
     strategy = cfg.get("strategy")
     if strategy == "page_index":
         return PageIndexChunker()
+    if strategy == "late_chunking":
+        return LateChunkingChunker()
     if strategy == "naive_tokens":
         return NaiveTokenChunker(chunk_size=int(cfg["chunk_size"]), overlap=int(cfg["overlap"]))
     if strategy == "structured_headings":
@@ -54,6 +57,21 @@ def build_chunker(cfg: dict):
             child_overlap=int(cfg.get("child_overlap", 100)),
         )
     raise ValueError(f"Unknown chunking strategy: {strategy}")
+
+def chunk_text_tokens(text: str, chunk_size: int, overlap: int) -> list[str]:
+    toks = simple_tokenize(text)
+    if chunk_size <= 0:
+        return [" ".join(toks)]
+    step = max(1, chunk_size - overlap)
+    out = []
+    for i in range(0, len(toks), step):
+        window = toks[i : i + chunk_size]
+        if not window:
+            continue
+        out.append(" ".join(window))
+        if i + chunk_size >= len(toks):
+            break
+    return out
 
 
 def main() -> None:
@@ -135,7 +153,16 @@ def main() -> None:
     first_ranks: list[int | None] = []
     per_q: list[dict] = []
 
-    retr_type = str(retr_cfg.get("type", "dense")).lower()
+    base_type = str(retr_cfg.get("type", "dense")).lower()
+
+    if base_type == "late_chunking":
+        page_retr = str(retr_cfg.get("page_retriever", "dense")).lower()
+        retr_type = f"late_chunking_{page_retr}"
+    else:
+        retr_type = base_type
+
+    is_late = (base_type == "late_chunking")
+
     dense_w = float(retr_cfg.get("dense_weight", 0.5))
     bm25_w = float(retr_cfg.get("bm25_weight", 0.5))
     candidate_k = int(retr_cfg.get("candidate_k", max(50, args.k * 10)))
@@ -147,55 +174,150 @@ def main() -> None:
         # Embed query once (dense path)
         q_vec = embedder.transform([query_text])
 
-        # 1) get initial candidates
-        if strategy == "tree_parent_child":
-            parent_top_k = int(retr_cfg.get("parent_top_k", chunk_cfg.get("parent_top_k", 3)))
-            top_parents = dense_parent_retrieve(q_vec, parent_matrix, k=parent_top_k)
-            allowed_parent_ids = {parent_ids[r.idx] for r in top_parents}
-            allowed_child_idx = [i for i, pid in enumerate(child_parent_ids) if pid in allowed_parent_ids]
+        # Late chunking retrieval
+        if is_late:
+            # You indexed pages (1 chunk per page). Now:
+            # 1) retrieve top pages
+            # 2) sub-chunk those pages at query time
+            # 3) dense score sub-chunks and return top-k
 
-            # Dense-only within allowed set
-            if not allowed_child_idx:
-                dense_candidates = dense_child_retrieve(q_vec, child_matrix, k=min(candidate_k, len(chunks)))
-                bm25_scores = bm25_children.get_scores(simple_tokenize(query_text))
-                candidates = dense_candidates
-            else:
-                sub_mat = child_matrix[allowed_child_idx]
-                sub_dense = pick_dense_retriever(sub_mat)
-                sub_dense_res = sub_dense(q_vec, sub_mat, k=min(candidate_k, len(allowed_child_idx)))
-                dense_candidates = [type(r)(idx=int(allowed_child_idx[r.idx]), score=r.score) for r in sub_dense_res]
-                bm25_scores_full = bm25_children.get_scores(simple_tokenize(query_text))
-                candidates = dense_candidates
+            page_top_k = int(retr_cfg.get("page_top_k", retr_cfg.get("parent_top_k", 12)))
+            sub_chunk_size = int(retr_cfg.get("sub_chunk_size", 300))
+            sub_overlap = int(retr_cfg.get("sub_overlap", 100))
+            sub_candidate_k = int(retr_cfg.get("sub_candidate_k", max(50, args.k * 10)))
 
-            if retr_type in ("bm25", "sparse"):
-                bm25_scores = bm25_children.get_scores(simple_tokenize(query_text))
-                top = np.argsort(-bm25_scores)[: min(args.k, len(bm25_scores))]
-                from ..index.retrieve import RetrievalResult
-                results = [RetrievalResult(idx=int(i), score=float(bm25_scores[int(i)])) for i in top]
-            elif retr_type in ("hybrid", "bm25+dense", "bm25_bge"):
-                bm25_scores = bm25_children.get_scores(simple_tokenize(query_text))
-                results = merge_hybrid(dense_candidates, bm25_scores, dense_weight=dense_w, bm25_weight=bm25_w, k=args.k)
+            # Retrieve pages using the configured "page_retriever" (default dense)
+            page_retriever = str(retr_cfg.get("page_retriever", "dense")).lower()
+
+            if page_retriever in ("bm25", "sparse"):
+                page_scores = bm25.get_scores(simple_tokenize(query_text))
+                page_idx = np.argsort(-page_scores)[: min(page_top_k, len(page_scores))]
+                top_pages = [int(i) for i in page_idx]
+            elif page_retriever in ("hybrid", "bm25+dense", "bm25_bge"):
+                dense_pages = dense_retrieve(q_vec, doc_matrix, k=min(sub_candidate_k, len(chunks)))
+                page_scores = bm25.get_scores(simple_tokenize(query_text))
+                hybrid_pages = merge_hybrid(
+                    dense_pages, page_scores, dense_weight=dense_w, bm25_weight=bm25_w, k=min(page_top_k, len(chunks))
+                )
+                top_pages = [r.idx for r in hybrid_pages]
             else:
-                # dense / parent-child default
-                results = dense_candidates[: args.k]
+                dense_pages = dense_retrieve(q_vec, doc_matrix, k=min(page_top_k, len(chunks)))
+                top_pages = [r.idx for r in dense_pages]
+
+            # Build query-time subchunks for these pages
+            sub_texts: list[str] = []
+            sub_meta: list[dict[str, Any]] = []
+
+            for pi in top_pages:
+                page_chunk = chunks[pi]
+                pieces = chunk_text_tokens(normalize_text(page_chunk.text), sub_chunk_size, sub_overlap)
+                for si, piece in enumerate(pieces):
+                    sub_texts.append(piece)
+                    sub_meta.append(
+                        {
+                            "chunk_id": f"{page_chunk.chunk_id}/sub{si}",
+                            "page_start": page_chunk.page_start,
+                            "page_end": page_chunk.page_end,
+                            "section_title": page_chunk.section_title,
+                            "text": piece,
+                        }
+                    )
+
+            if not sub_texts:
+                results = []
+            else:
+                sub_matrix = embedder.transform(sub_texts)
+                sub_dense = pick_dense_retriever(sub_matrix)
+                sub_candidates = sub_dense(q_vec, sub_matrix, k=min(sub_candidate_k, len(sub_texts)))
+                results = sub_candidates[: args.k]
+
+            # Optional rerank on subchunks
+            if reranker is not None and str(retr_cfg.get("rerank_on", "candidates")).lower() in ("candidates", "topk", "all"):
+                base = results
+                # build list-like object compatible with rerank_cross_encoder: needs idx+score and doc_texts array
+                doc_texts_sub = sub_texts
+                results = rerank_cross_encoder(
+                    query_text, base, doc_texts_sub, reranker, k=args.k, batch_size=int(retr_cfg.get("reranker_batch_size", 32))
+                )
+
+            # Convert to the same "chunks[r.idx]" style by synthesizing lightweight chunk objects
+            # (so your existing evaluation block can stay unchanged)
+            from ..chunkers.base import Chunk
+            synth_chunks: list[Chunk] = []
+            for m in sub_meta:
+                synth_chunks.append(
+                    Chunk(
+                        chunk_id=m["chunk_id"],
+                        text=m["text"],
+                        page_start=m["page_start"],
+                        page_end=m["page_end"],
+                        section_title=m["section_title"],
+                        strategy="late_chunking",
+                    )
+                )
+
+            # Use synthesized chunks for evaluation output
+            chunks_backup = chunks
+            chunks = synth_chunks
+
+            # fall through to your existing evaluation block below (it uses `chunks[r.idx]`)
+            # but restore at the end of this question to avoid affecting next question’s indices
+            # We'll restore right after the evaluation section.
+
+        if not is_late:
+            # 1) get initial candidates
+            if strategy == "tree_parent_child":
+                parent_top_k = int(retr_cfg.get("parent_top_k", chunk_cfg.get("parent_top_k", 3)))
+                top_parents = dense_parent_retrieve(q_vec, parent_matrix, k=parent_top_k)
+                allowed_parent_ids = {parent_ids[r.idx] for r in top_parents}
+                allowed_child_idx = [i for i, pid in enumerate(child_parent_ids) if pid in allowed_parent_ids]
+
+                # Dense-only within allowed set
+                if not allowed_child_idx:
+                    dense_candidates = dense_child_retrieve(q_vec, child_matrix, k=min(candidate_k, len(chunks)))
+                    bm25_scores = bm25_children.get_scores(simple_tokenize(query_text))
+                    candidates = dense_candidates
+                else:
+                    sub_mat = child_matrix[allowed_child_idx]
+                    sub_dense = pick_dense_retriever(sub_mat)
+                    sub_dense_res = sub_dense(q_vec, sub_mat, k=min(candidate_k, len(allowed_child_idx)))
+                    dense_candidates = [type(r)(idx=int(allowed_child_idx[r.idx]), score=r.score) for r in sub_dense_res]
+                    bm25_scores_full = bm25_children.get_scores(simple_tokenize(query_text))
+                    candidates = dense_candidates
+
+                if retr_type in ("bm25", "sparse"):
+                    bm25_scores = bm25_children.get_scores(simple_tokenize(query_text))
+                    top = np.argsort(-bm25_scores)[: min(args.k, len(bm25_scores))]
+                    from ..index.retrieve import RetrievalResult
+                    results = [RetrievalResult(idx=int(i), score=float(bm25_scores[int(i)])) for i in top]
+                elif retr_type in ("hybrid", "bm25+dense", "bm25_bge"):
+                    bm25_scores = bm25_children.get_scores(simple_tokenize(query_text))
+                    results = merge_hybrid(dense_candidates, bm25_scores, dense_weight=dense_w, bm25_weight=bm25_w, k=args.k)
+                else:
+                    # dense / parent-child default
+                    results = dense_candidates[: args.k]
+
+            else:
+                dense_candidates = dense_retrieve(q_vec, doc_matrix, k=min(candidate_k, len(chunks)))
+
+                if retr_type in ("dense", "vector"):
+                    results = dense_candidates[: args.k]
+                elif retr_type in ("bm25", "sparse"):
+                    bm25_scores = bm25.get_scores(simple_tokenize(query_text))
+                    top = np.argsort(-bm25_scores)[: min(args.k, len(bm25_scores))]
+                    results = [type(dense_candidates[0] if dense_candidates else object())(idx=int(i), score=float(bm25_scores[int(i)])) for i in top]
+                    # above type hack; normalize to RetrievalResult
+                    from ..index.retrieve import RetrievalResult
+                    results = [RetrievalResult(idx=int(i), score=float(bm25_scores[int(i)])) for i in top]
+                elif retr_type in ("hybrid", "hybrid_bge", "hybrid_dense", "bm25+dense", "bm25_bge"):
+                    bm25_scores = bm25.get_scores(simple_tokenize(query_text))
+                    results = merge_hybrid(dense_candidates, bm25_scores, dense_weight=dense_w, bm25_weight=bm25_w, k=args.k)
+                else:
+                    raise ValueError(f"Unknown retrieval type: {retr_type}")
 
         else:
-            dense_candidates = dense_retrieve(q_vec, doc_matrix, k=min(candidate_k, len(chunks)))
-
-            if retr_type in ("dense", "vector"):
-                results = dense_candidates[: args.k]
-            elif retr_type in ("bm25", "sparse"):
-                bm25_scores = bm25.get_scores(simple_tokenize(query_text))
-                top = np.argsort(-bm25_scores)[: min(args.k, len(bm25_scores))]
-                results = [type(dense_candidates[0] if dense_candidates else object())(idx=int(i), score=float(bm25_scores[int(i)])) for i in top]
-                # above type hack; normalize to RetrievalResult
-                from ..index.retrieve import RetrievalResult
-                results = [RetrievalResult(idx=int(i), score=float(bm25_scores[int(i)])) for i in top]
-            elif retr_type in ("hybrid", "bm25+dense", "bm25_bge"):
-                bm25_scores = bm25.get_scores(simple_tokenize(query_text))
-                results = merge_hybrid(dense_candidates, bm25_scores, dense_weight=dense_w, bm25_weight=bm25_w, k=args.k)
-            else:
-                raise ValueError(f"Unknown retrieval type: {retr_type}")
+            # Late chunking already produced 'results' and synthesized 'chunks'
+            dense_candidates = results
 
         # 2) optional cross-encoder reranking
         if reranker is not None and str(retr_cfg.get("rerank_on", "candidates")).lower() in ("candidates", "topk", "all"):
@@ -232,6 +354,10 @@ def main() -> None:
                     if c.page_start <= ep <= c.page_end:
                         hit_rank = rank
                         break
+
+        # Restore chunks after late chunking synthesized list
+        if is_late:
+            chunks = chunks_backup
 
         first_ranks.append(hit_rank)
         per_q.append(
@@ -271,6 +397,7 @@ def main() -> None:
         "run_id": run_id,
         "chunking_strategy": strategy,
         "retrieval_type": retr_type,
+        "page_retriever": retr_cfg.get("page_retriever", "") if base_type == "late_chunking" else "",
         "rewriter": retr_cfg.get("rewriter", {}).get("type", "none") if isinstance(retr_cfg.get("rewriter"), dict) else "none",
         "reranker": retr_cfg.get("reranker", {}).get("model_name", "") if isinstance(retr_cfg.get("reranker"), dict) else "",
         "cleaning": profile.name,
