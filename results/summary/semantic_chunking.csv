@@ -1,0 +1,4 @@
+run_id,strategy,cleaning,retrieval_embedder_type,retrieval_embedder_model,semantic_embedder_model,max_tokens,min_tokens,similarity_threshold,num_chunks,hit@1,hit@3,hit@5,mrr,avg_first_rank,run_dir
+20260227_114302,semantic_similarity,basic,sentence_transformers,BAAI/bge-base-en-v1.5,BAAI/bge-base-en-v1.5,450,80,0.55,392,0.2727272727272727,0.6060606060606061,0.696969696969697,0.452020202020202,1.9565217391304348,results\runs\semantic_20260227_114302
+20260227_114452,semantic_similarity,basic,sentence_transformers,BAAI/bge-base-en-v1.5,BAAI/bge-base-en-v1.5,450,80,0.55,392,0.2727272727272727,0.6060606060606061,0.696969696969697,0.452020202020202,1.9565217391304348,results\runs\semantic_20260227_114452
+20260227_114607,semantic_similarity,deep,sentence_transformers,BAAI/bge-base-en-v1.5,BAAI/bge-base-en-v1.5,450,80,0.55,284,0.30303030303030304,0.6363636363636364,0.696969696969697,0.46818181818181814,1.9130434782608696,results\runs\semantic_20260227_114607

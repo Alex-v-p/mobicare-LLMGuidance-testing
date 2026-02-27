@@ -1,0 +1,23 @@
+strategy: semantic
+
+# Embedding-based semantic chunking
+# - Split pages into sentence-like units
+# - Compute embeddings for each unit
+# - Start a new chunk when adjacent similarity drops below threshold
+
+# Token bounds for each chunk (approx tokens via regex tokenization)
+max_tokens: 450
+min_tokens: 80
+
+# Lower = more (smaller) chunks, higher = fewer (bigger) chunks
+similarity_threshold: 0.55
+
+# Optional: override the embedder used for semantic boundary detection.
+# If omitted, the runner will reuse the retrieval embedder if it is
+# sentence-transformers; otherwise it defaults to BAAI/bge-small-en-v1.5.
+#
+# semantic_embedder:
+#   type: sentence_transformers
+#   model_name: BAAI/bge-small-en-v1.5
+#   device: auto
+#   normalize_embeddings: true
