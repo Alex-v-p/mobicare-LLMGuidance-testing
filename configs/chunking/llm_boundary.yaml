@@ -1,0 +1,6 @@
+strategy: llm_boundary
+max_tokens: 450
+min_tokens: 80
+boundary_window: 6
+max_retries: 2
+retry_backoff_s: 0.8

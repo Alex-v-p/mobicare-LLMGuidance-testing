@@ -1,0 +1,3 @@
+run_id,variant,strategy,cleaning,retrieval_embedder_type,retrieval_embedder_model,ollama_base_url,ollama_model,max_tokens,min_tokens,boundary_window,num_chunks,hit@1,hit@3,hit@5,mrr,avg_first_rank,run_dir
+20260227_151224,llm_boundary_raw,llm_boundary,basic,tfidf,,http://localhost:11434,llama3.1,450,80,6,101,0.3333333333333333,0.5151515151515151,0.7575757575757576,0.4702020202020202,2.4,results\runs\llm_boundary_20260227_151224\llm_boundary_raw
+20260227_151224,llm_boundary_summary_aug,llm_boundary,basic,tfidf,,http://localhost:11434,llama3.1,450,80,6,101,0.30303030303030304,0.5151515151515151,0.6363636363636364,0.42626262626262623,2.0952380952380953,results\runs\llm_boundary_20260227_151224\llm_boundary_summary_aug
