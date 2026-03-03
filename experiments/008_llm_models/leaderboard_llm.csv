@@ -1,0 +1,1 @@
+run_id,model,ollama_base_url,processor,processor_ps_line,num_prompts,repeats,warmup,ok,errors,avg_total_s,p50_total_s,avg_out_tokens,avg_prompt_tokens,avg_out_tokens_per_s,run_dir

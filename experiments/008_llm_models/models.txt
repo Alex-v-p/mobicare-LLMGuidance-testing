@@ -1,0 +1,19 @@
+# --- Small / fast (quick sanity + cheap iterations) ---
+llama3.2:1b
+llama3.2:3b
+qwen2.5:3b
+phi3:3.8b
+gemma2:2b
+
+# --- Solid general baselines (your current picks + nearby) ---
+mistral:7b
+llama3.1:8b
+qwen2.5:7b
+gemma2:9b
+
+# --- Stronger / larger (quality step-up; slower / more VRAM) ---
+qwen2.5:14b
+qwen2.5:32b
+
+# --- “Medical / clinical” flavored (community fine-tunes; names can vary by registry) ---
+meditron:7b
