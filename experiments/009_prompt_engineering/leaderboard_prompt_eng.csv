@@ -1,0 +1,4 @@
+run_id,variant,ollama_model,k,num_questions,answer_nonempty_rate,cites_rate,citation_hallucination_rate,expected_page_hit_rate,length_p50_tokens,length_p95_tokens,run_dir
+20260303_180737,strict_med,llama3.1,5,33,1.0,1.0,0.24242424242424243,0.48484848484848486,45.0,102.0,C:\Users\Alexa\Pictures\3AC\Internship\InternshipWork\mobicare-LLMGuidance-testing\results\runs\prompteng_20260303_180737
+20260303_180737,structured,llama3.1,5,33,1.0,0.9696969696969697,0.0625,0.5151515151515151,136.0,167.0,C:\Users\Alexa\Pictures\3AC\Internship\InternshipWork\mobicare-LLMGuidance-testing\results\runs\prompteng_20260303_180737
+20260303_180737,hard_grounding,llama3.1,5,33,0.696969696969697,0.6666666666666666,0.045454545454545456,0.3333333333333333,23.0,71.0,C:\Users\Alexa\Pictures\3AC\Internship\InternshipWork\mobicare-LLMGuidance-testing\results\runs\prompteng_20260303_180737

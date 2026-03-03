@@ -5,6 +5,7 @@ import os
 import random
 import time
 import urllib.request
+import urllib.error
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -75,7 +76,19 @@ class OllamaClient:
 
     def generate(self, prompt: str) -> str:
         """Call Ollama /api/generate (non-streaming)."""
-        url = self.base_url.rstrip("/") + "/api/generate"
+        # Be tolerant to base URLs that already include an API prefix.
+        base = self.base_url.rstrip("/")
+        if base.endswith("/api"):
+            url = base + "/generate"
+        elif base.endswith("/v1"):
+            # OpenAI-compatible endpoints are different; we don't support them here.
+            # Keep a clear error instead of a confusing 404.
+            raise RuntimeError(
+                "OLLAMA_BASE_URL appears to point at an OpenAI-compatible '/v1' endpoint. "
+                "This project uses Ollama's native endpoint. Set OLLAMA_BASE_URL to e.g. http://localhost:11434"
+            )
+        else:
+            url = base + "/api/generate"
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -87,8 +100,28 @@ class OllamaClient:
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            # Ollama returns useful JSON bodies on errors (e.g. model not found).
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                body = ""
+
+            hint = ""
+            if e.code == 404:
+                hint = (
+                    "\n\nCommon causes:\n"
+                    "- The model name is not installed locally. Check `ollama list` and set OLLAMA_MODEL accordingly.\n"
+                    "- OLLAMA_BASE_URL includes an extra '/api' segment (e.g. http://localhost:11434/api). "
+                    "Set it to http://localhost:11434.\n"
+                )
+            raise RuntimeError(
+                f"Ollama request failed: HTTP {e.code} {e.reason}. URL={url}.\nResponse body: {body}{hint}"
+            ) from None
         try:
             obj = json.loads(raw)
             return str(obj.get("response", ""))

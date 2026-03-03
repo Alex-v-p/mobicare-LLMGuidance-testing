@@ -1,0 +1,3 @@
+run_id,variant,ollama_model,k,num_questions,nonempty_rate,cites_rate,citation_hallucination_rate,expected_page_hit_rate,length_p50_tokens,run_dir,verified_supported_rate,avg_attempts
+20260303_180806,baseline,llama3.1,5,33,1.0,1.0,0.15151515151515152,0.5454545454545454,42.0,C:\Users\Alexa\Pictures\3AC\Internship\InternshipWork\mobicare-LLMGuidance-testing\results\runs\multistep_20260303_180806,,
+20260303_180806,multistep,llama3.1,5,33,0.9696969696969697,0.9696969696969697,0.09375,0.45454545454545453,38.0,C:\Users\Alexa\Pictures\3AC\Internship\InternshipWork\mobicare-LLMGuidance-testing\results\runs\multistep_20260303_180806,0.8181818181818182,1.303030303030303
